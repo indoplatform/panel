@@ -1,0 +1,243 @@
+// Indoplatform Panel — Database schema
+// Database terpisah dari KONI/Rental/Wilayah. Pakai 'panel' atau 'prod_panel'.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH & USERS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN // Akses penuh semua fitur (restart service, edit DNS, lihat audit)
+  ADMIN       // Lihat dashboard + log + metrics (read-only)
+  VIEWER      // Read-only dashboard saja
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  username     String?   @unique
+  passwordHash String
+  name         String
+  role         UserRole  @default(VIEWER)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  ipWhitelist  String[]  @default([]) // Optional IP whitelist per user (kosong = all allowed)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions     Session[]
+  otpCodes     OtpCode[]
+  auditLogs    AuditLog[]
+
+  @@index([role])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+
+  @@index([userId])
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  context   String   // "LOGIN" | "RESET_PASSWORD" | "2FA"
+  consumedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, context])
+}
+
+// ============================================================
+// MONITORING
+// ============================================================
+
+model MetricSnapshot {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  hostname    String
+  // CPU
+  cpuPercent  Float
+  cpuCores    Int
+  loadAvg1    Float
+  loadAvg5    Float
+  loadAvg15   Float
+  // Memory
+  memTotal    BigInt
+  memUsed     BigInt
+  memPercent  Float
+  swapTotal   BigInt
+  swapUsed    BigInt
+  // Disk
+  diskTotal   BigInt
+  diskUsed    BigInt
+  diskPercent Float
+  // Network
+  netRxBytes  BigInt
+  netTxBytes  BigInt
+  // Process
+  processCount Int
+
+  @@index([timestamp])
+  @@index([hostname, timestamp])
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+  FAILED
+  UNKNOWN
+}
+
+model MonitoredService {
+  id          String        @id @default(cuid())
+  name        String        @unique // systemd unit name, e.g. "konikaltim.service"
+  displayName String        // human label, e.g. "KONI Kaltim"
+  description String?
+  // SSH connection for remote services (kosong = localhost)
+  sshHost     String?
+  sshUser     String?
+  sshKeyPath  String?
+  // Config
+  isCritical  Boolean       @default(false) // jika true, alert kalau down
+  lastChecked DateTime?
+  lastStatus  ServiceStatus @default(UNKNOWN)
+  enabled     Boolean       @default(true)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  events      ServiceEvent[]
+
+  @@index([enabled, sortOrder])
+}
+
+model ServiceEvent {
+  id        String   @id @default(cuid())
+  serviceId String
+  service   MonitoredService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  status    ServiceStatus
+  message   String?
+  actorId   String? // User yang trigger (null = cron/system)
+  actorName String?
+  createdAt DateTime @default(now())
+
+  @@index([serviceId, createdAt])
+}
+
+model UptimeTarget {
+  id          String   @id @default(cuid())
+  name        String
+  url         String
+  method      String   @default("HEAD") // HEAD | GET
+  intervalSec Int      @default(60)
+  timeoutMs   Int      @default(10000)
+  isActive    Boolean  @default(true)
+  notifyOn    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  checks      UptimeCheck[]
+
+  @@index([isActive, sortOrder])
+}
+
+model UptimeCheck {
+  id           String   @id @default(cuid())
+  targetId     String
+  target       UptimeTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  timestamp    DateTime @default(now())
+  statusCode   Int?
+  responseMs   Int?
+  isUp         Boolean
+  errorMessage String?
+
+  @@index([targetId, timestamp])
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  SERVICE_START
+  SERVICE_STOP
+  SERVICE_RESTART
+  METRICS_VIEW
+  LOG_VIEW
+  DNS_CREATE
+  DNS_UPDATE
+  DNS_DELETE
+  UPTIME_TARGET_CREATE
+  UPTIME_TARGET_UPDATE
+  UPTIME_TARGET_DELETE
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  SETTINGS_UPDATE
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  timestamp  DateTime    @default(now())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName   String?
+  userEmail  String?
+  action     AuditAction
+  entity     String? // "service" | "dns" | "user" | "uptime"
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  success    Boolean     @default(true)
+  errorMsg   String?
+
+  @@index([timestamp])
+  @@index([userId, timestamp])
+  @@index([action, timestamp])
+  @@index([entity, entityId])
+}
+
+// ============================================================
+// APP SETTINGS (singleton)
+// ============================================================
+
+model AppSetting {
+  id                  String   @id @default("singleton")
+  // Alert thresholds
+  alertCpuPercent     Int      @default(85)
+  alertMemoryPercent  Int      @default(90)
+  alertDiskPercent    Int      @default(90)
+  alertEnabled        Boolean  @default(true)
+  // Retention
+  metricRetentionDays Int      @default(7)
+  auditRetentionDays  Int      @default(90)
+  uptimeRetentionDays Int      @default(30)
+  // Feature flags
+  dnsManagerEnabled   Boolean  @default(true)
+  serviceManagerEnabled Boolean @default(true)
+  logViewerEnabled    Boolean  @default(true)
+  // Branding
+  panelName           String   @default("Indoplatform Panel")
+  updatedAt           DateTime @updatedAt
+}

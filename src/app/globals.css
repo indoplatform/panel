@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Theme: "Heritage Premium" — Navy + Gold (Indoplatform)
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* Heritage Premium palette */
+    --background: 40 30% 98%;        /* warm white #FAF9F6 */
+    --foreground: 220 60% 12%;       /* slate-900 navy deep */
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 60% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 60% 12%;
+
+    --primary: 220 60% 12%;          /* slate-900 #0F172A */
+    --primary-foreground: 38 92% 95%; /* amber-50 #FEF9EC */
+
+    --secondary: 220 30% 96%;         /* slate-50 */
+    --secondary-foreground: 220 60% 12%;
+
+    --muted: 220 20% 96%;             /* slate-100 */
+    --muted-foreground: 220 15% 40%;  /* slate-500-ish */
+
+    --accent: 38 92% 50%;             /* amber-500 #F59E0B */
+    --accent-foreground: 220 60% 12%;
+
+    --destructive: 0 72% 51%;         /* rose-600 */
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 64% 40%;           /* emerald-600 */
+    --warning: 32 95% 50%;            /* amber-600 */
+    --info: 199 89% 48%;              /* sky-500 */
+
+    --border: 220 20% 88%;            /* slate-300 */
+    --input: 220 20% 88%;
+    --ring: 38 92% 50%;               /* amber-500 */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 220 60% 8%;
+    --foreground: 38 92% 95%;
+    --card: 220 60% 10%;
+    --card-foreground: 38 92% 95%;
+    --popover: 220 60% 10%;
+    --popover-foreground: 38 92% 95%;
+    --primary: 38 92% 50%;            /* gold becomes primary in dark */
+    --primary-foreground: 220 60% 12%;
+    --secondary: 220 30% 16%;
+    --secondary-foreground: 38 92% 95%;
+    --muted: 220 30% 16%;
+    --muted-foreground: 220 15% 65%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 60% 12%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 38 92% 95%;
+    --border: 220 30% 22%;
+    --input: 220 30% 22%;
+    --ring: 38 92% 50%;
+  }
+
+  * { @apply border-border; }
+  html, body { @apply bg-background text-foreground; }
+  body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+}
