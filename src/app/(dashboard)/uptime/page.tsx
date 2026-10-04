@@ -4,14 +4,72 @@ import { UptimeList } from "@/components/uptime/UptimeList";
 
 export const dynamic = "force-dynamic";
 
+type UptimeCheck = {
+  id: string;
+  timestamp: string;
+  statusCode: number | null;
+  responseMs: number | null;
+  isUp: boolean;
+  errorMessage: string | null;
+};
+
+type UptimeTarget = {
+  id: string;
+  name: string;
+  url: string;
+  method: string;
+  intervalSec: number;
+  isActive: boolean;
+  notifyOn: boolean;
+  createdAt: string;
+  checks: UptimeCheck[];
+};
+
+type RowIn = {
+  id: string;
+  name: string;
+  url: string;
+  method: string;
+  intervalSec: number;
+  isActive: boolean;
+  notifyOn: boolean;
+  createdAt: Date;
+  checks: Array<{
+    id: string;
+    timestamp: Date;
+    statusCode: number | null;
+    responseMs: number | null;
+    isUp: boolean;
+    errorMessage: string | null;
+  }>;
+};
+
 export default async function UptimePage() {
   await requireAuthPage();
-  const targets = await prisma.uptimeTarget.findMany({
+  const rows = (await prisma.uptimeTarget.findMany({
     orderBy: { sortOrder: "asc" },
     include: {
       checks: { orderBy: { timestamp: "desc" }, take: 100 }
     }
-  });
+  })) as unknown as RowIn[];
+  const targets: UptimeTarget[] = rows.map((t: RowIn) => ({
+    id: t.id,
+    name: t.name,
+    url: t.url,
+    method: t.method,
+    intervalSec: t.intervalSec,
+    isActive: t.isActive,
+    notifyOn: t.notifyOn,
+    createdAt: t.createdAt.toISOString(),
+    checks: t.checks.map((c) => ({
+      id: c.id,
+      timestamp: c.timestamp.toISOString(),
+      statusCode: c.statusCode,
+      responseMs: c.responseMs,
+      isUp: c.isUp,
+      errorMessage: c.errorMessage
+    }))
+  }));
   return (
     <div className="space-y-6">
       <div>
@@ -20,26 +78,7 @@ export default async function UptimePage() {
           HTTP HEAD check berkala untuk URL publik. Cron jalan tiap 1 menit (lihat scripts/cron-runner.js).
         </p>
       </div>
-      <UptimeList
-        targets={targets.map((t) => ({
-          id: t.id,
-          name: t.name,
-          url: t.url,
-          method: t.method,
-          intervalSec: t.intervalSec,
-          isActive: t.isActive,
-          notifyOn: t.notifyOn,
-          createdAt: t.createdAt.toISOString(),
-          checks: t.checks.map((c) => ({
-            id: c.id,
-            timestamp: c.timestamp.toISOString(),
-            statusCode: c.statusCode,
-            responseMs: c.responseMs,
-            isUp: c.isUp,
-            errorMessage: c.errorMessage
-          }))
-        }))}
-      />
+      <UptimeList targets={targets} />
     </div>
   );
 }

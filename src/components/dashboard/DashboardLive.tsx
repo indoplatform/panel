@@ -2,7 +2,7 @@
 
 /**
  * DashboardLive — client component yang fetch metrics real-time dari VPS.
- * Auto-refresh setiap 10 detik via SWR-style polling.
+ * Auto-refresh setiap 3 detik via SWR-style polling (Issue 11).
  */
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,7 +15,10 @@ import {
   Activity,
   Server,
   RefreshCw,
-  Clock
+  Clock,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Zap
 } from "lucide-react";
 import { formatBytes, formatUptime } from "@/lib/utils";
 
@@ -29,7 +32,9 @@ interface VpsMetrics {
   memory: { total: number; used: number; percent: number };
   swap: { total: number; used: number };
   disk: { total: number; used: number; percent: number };
-  network: { rxBytes: number; txBytes: number };
+  diskIo?: { readBytesPerSec: number; writeBytesPerSec: number } | null;
+  network: { rxBytes: number; txBytes: number; rxBytesPerSec?: number; txBytesPerSec?: number };
+  gpu?: { utilizationPercent: number; memUsedMB: number; memTotalMB: number; vendor: string; model: string } | null;
   processCount: number;
   topProcesses: Array<{ pid: number; name: string; cpu: number; mem: number }>;
 }
@@ -57,7 +62,7 @@ export function DashboardLive() {
 
   useEffect(() => {
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 10000); // 10s
+    const interval = setInterval(fetchMetrics, 3000); // 3 detik (Issue 11: realtime)
     return () => clearInterval(interval);
   }, []);
 
@@ -71,7 +76,7 @@ export function DashboardLive() {
               VPS Real-time
             </CardTitle>
             <CardDescription>
-              CPU, RAM, disk, network — refresh tiap 10 detik
+              CPU, RAM, disk, network — refresh tiap 3 detik (realtime)
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -129,6 +134,55 @@ export function DashboardLive() {
                 }
                 sub={`uptime ${formatUptime(data.uptime)}`}
                 percent={Math.min((data.loadAvg.one / data.cpuCores) * 100, 100)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <MetricTile
+                icon={ArrowDownToLine}
+                label="Net RX"
+                percent={0}
+                sub={`Total ${formatBytes(data.network.rxBytes)}`}
+                customValue={
+                  <div className="font-mono text-lg font-semibold text-sky-600">
+                    {(data.network.rxBytesPerSec ?? 0).toFixed(0)} KB/s
+                  </div>
+                }
+              />
+              <MetricTile
+                icon={ArrowUpFromLine}
+                label="Net TX"
+                percent={0}
+                sub={`Total ${formatBytes(data.network.txBytes)}`}
+                customValue={
+                  <div className="font-mono text-lg font-semibold text-emerald-600">
+                    {(data.network.txBytesPerSec ?? 0).toFixed(0)} KB/s
+                  </div>
+                }
+              />
+              {data.gpu ? (
+                <MetricTile
+                  icon={Zap}
+                  label="GPU"
+                  percent={data.gpu.utilizationPercent}
+                  sub={`${data.gpu.vendor} · ${(data.gpu.memUsedMB / 1024).toFixed(1)} GB`}
+                  value={`${data.gpu.utilizationPercent.toFixed(0)}%`}
+                />
+              ) : (
+                <MetricTile
+                  icon={Zap}
+                  label="GPU"
+                  percent={0}
+                  sub="Tidak ada GPU"
+                  customValue={<div className="text-sm text-slate-400">N/A</div>}
+                />
+              )}
+              <MetricTile
+                icon={Activity}
+                label="Disk I/O"
+                percent={0}
+                sub={`R ${(data.diskIo?.readBytesPerSec ?? 0).toFixed(0)} KB/s · W ${(data.diskIo?.writeBytesPerSec ?? 0).toFixed(0)} KB/s`}
+                customValue={<div className="text-xs text-slate-500">read / write throughput</div>}
               />
             </div>
 

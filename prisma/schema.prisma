@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -87,9 +88,17 @@ model MetricSnapshot {
   diskTotal   BigInt
   diskUsed    BigInt
   diskPercent Float
+  diskReadBytesPerSec  Float?
+  diskWriteBytesPerSec Float?
   // Network
   netRxBytes  BigInt
   netTxBytes  BigInt
+  netRxBytesPerSec Float?
+  netTxBytesPerSec Float?
+  // GPU (optional — system may have no discrete GPU)
+  gpuPercent    Float?
+  gpuMemUsedMB  Float?
+  gpuModel      String?
   // Process
   processCount Int
 
@@ -206,6 +215,7 @@ model AuditLog {
   action     AuditAction
   entity     String? // "service" | "dns" | "user" | "uptime"
   entityId   String?
+  page       String?
   details    Json?
   ipAddress  String?
   userAgent  String?
@@ -216,6 +226,7 @@ model AuditLog {
   @@index([userId, timestamp])
   @@index([action, timestamp])
   @@index([entity, entityId])
+  @@index([page])
 }
 
 // ============================================================
@@ -240,4 +251,32 @@ model AppSetting {
   // Branding
   panelName           String   @default("Indoplatform Panel")
   updatedAt           DateTime @updatedAt
+}
+
+// ============================================================
+// CROSS-APP READ-ONLY MODEL — mirrors KoniKaltim's UserActivity table.
+// Queried ONLY via `koniPrisma` (src/lib/koni-db.ts), which overrides the
+// datasource url at runtime to point at KONI_DATABASE_URL. NOT part of
+// Panel's own database — do not query via the default `prisma` client and
+// do not run `prisma migrate` for this model against Panel's own DB.
+// ============================================================
+
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String?
+  userName  String?
+  userEmail String?
+  role      String?
+  action    String
+  entity    String?
+  entityId  String?
+  page      String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  success   Boolean  @default(true)
+  errorMsg  String?
+  createdAt DateTime @default(now())
+
+  @@index([page])
 }

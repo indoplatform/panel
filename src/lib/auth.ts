@@ -3,22 +3,21 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import type { UserRole } from "@prisma/client";
+import { authConfig } from "@/lib/auth.config";
+
+type UserRoleType = "SUPER_ADMIN" | "ADMIN" | "VIEWER";
 
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      role: UserRole;
+      role: UserRoleType;
     } & DefaultSession["user"];
   }
   interface User {
-    role: UserRole;
+    role: UserRoleType;
   }
 }
-
-// JWT augmentation removed — NextAuth v5 beta 25 module path is unstable.
-// We cast token.role inside callbacks where needed.
 
 const credentialsSchema = z.object({
   identifier: z.string().min(3),
@@ -26,9 +25,7 @@ const credentialsSchema = z.object({
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: true,
-  session: { strategy: "jwt", maxAge: 60 * 60 * 8 }, // 8 hours
-  pages: { signIn: "/login" },
+  ...authConfig,
   providers: [
     Credentials({
       name: "Credentials",
@@ -56,25 +53,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role as UserRoleType
         };
       }
     })
-  ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        (token as { role?: UserRole }).role = (user as { role?: UserRole }).role;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token && session.user) {
-        if (token.sub) session.user.id = token.sub;
-        const role = (token as { role?: UserRole }).role;
-        if (role) session.user.role = role;
-      }
-      return session;
-    }
-  }
+  ]
 });

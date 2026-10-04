@@ -2,7 +2,26 @@ import { NextResponse } from "next/server";
 import { requireAuthPage } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { readServiceStatus } from "@/lib/system";
-import type { ServiceStatus } from "@prisma/client";
+
+type ServiceStatusType = "ACTIVE" | "INACTIVE" | "FAILED" | "DEGRADED" | "UNKNOWN";
+type ServiceRow = {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string | null;
+  isCritical: boolean;
+  enabled: boolean;
+  lastStatus: ServiceStatusType;
+  lastChecked: Date | null;
+  sshHost: string | null;
+  events: Array<{
+    id: string;
+    status: ServiceStatusType;
+    message: string;
+    createdAt: Date;
+    actorName: string | null;
+  }>;
+};
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,18 +29,18 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     await requireAuthPage();
-    const services = await prisma.monitoredService.findMany({
+    const services = (await prisma.monitoredService.findMany({
       where: { enabled: true },
       orderBy: { sortOrder: "asc" },
       include: {
         events: { orderBy: { createdAt: "desc" }, take: 1 }
       }
-    });
+    })) as unknown as ServiceRow[];
 
     // Live status (only for local services — ssh not implemented V1.0)
     const enriched = await Promise.all(
-      services.map(async (svc) => {
-        let liveStatus: ServiceStatus = svc.lastStatus;
+      services.map(async (svc: ServiceRow) => {
+        let liveStatus: ServiceStatusType = svc.lastStatus;
         if (!svc.sshHost) {
           try {
             liveStatus = await readServiceStatus(svc.name);

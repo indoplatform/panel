@@ -1,5 +1,8 @@
+import NextAuth from "next-auth";
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { authConfig } from "@/lib/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = [
   "/login",
@@ -11,12 +14,22 @@ const PUBLIC_PATHS = [
   "/imgs"
 ];
 
-export default auth((req) => {
+export default auth((req: NextRequest & { auth: unknown }) => {
   const { pathname } = req.nextUrl;
 
-  // Allow public paths
+  // Inject current path into request headers so server actions / API routes
+  // can capture the originating page via `headers().get('x-pathname')`.
+  // Dipakai oleh writeAudit() untuk kolom `page` di cross-app activity feed.
+  const injectPathname = (responseInit?: Parameters<typeof NextResponse.next>[0]) => {
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-pathname", pathname);
+    return NextResponse.next({ ...responseInit, request: { headers: requestHeaders } });
+  };
+
+  // Allow public paths (no auth required) — but still inject pathname so
+  // public page renders (like /login) can record `page` in audit log.
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    return injectPathname();
   }
 
   // req.auth is populated by the auth() wrapper
@@ -33,7 +46,7 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return injectPathname();
 });
 
 export const config = {

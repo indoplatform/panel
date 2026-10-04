@@ -4,9 +4,10 @@ import { requireSuperAdmin } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { execSystemctl } from "@/lib/system";
 import { writeAudit, getClientInfo } from "@/lib/audit";
-import type { ServiceStatus } from "@prisma/client";
 
 type ServiceAction = "start" | "stop" | "restart" | "status";
+
+type ServiceStatusType = "ACTIVE" | "INACTIVE" | "FAILED" | "DEGRADED";
 
 const ACTION_MAP: Record<ServiceAction, ServiceAction> = {
   start: "start",
@@ -15,7 +16,7 @@ const ACTION_MAP: Record<ServiceAction, ServiceAction> = {
   status: "status"
 };
 
-const STATUS_MAP: Record<string, ServiceStatus> = {
+const STATUS_MAP: Record<string, ServiceStatusType> = {
   start: "ACTIVE",
   stop: "INACTIVE",
   restart: "ACTIVE"

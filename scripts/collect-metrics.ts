@@ -26,8 +26,15 @@ async function main() {
       diskTotal: BigInt(m.disk.total),
       diskUsed: BigInt(m.disk.used),
       diskPercent: m.disk.percent,
+      diskReadBytesPerSec: m.diskIo?.readBytesPerSec ?? null,
+      diskWriteBytesPerSec: m.diskIo?.writeBytesPerSec ?? null,
       netRxBytes: BigInt(m.network.rxBytes),
       netTxBytes: BigInt(m.network.txBytes),
+      netRxBytesPerSec: m.network.rxBytesPerSec ?? null,
+      netTxBytesPerSec: m.network.txBytesPerSec ?? null,
+      gpuPercent: m.gpu?.utilizationPercent ?? null,
+      gpuMemUsedMB: m.gpu?.memUsedMB ?? null,
+      gpuModel: m.gpu?.model ?? null,
       processCount: m.processCount
     }
   });

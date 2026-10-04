@@ -5,7 +5,9 @@
 import si from "systeminformation";
 import { exec } from "child_process";
 import { promisify } from "util";
-import type { MonitoredService, ServiceStatus } from "@prisma/client";
+import type { MonitoredService } from "@prisma/client";
+
+type ServiceStatusType = "ACTIVE" | "INACTIVE" | "FAILED" | "DEGRADED" | "UNKNOWN";
 
 const execp = promisify(exec);
 
@@ -22,8 +24,12 @@ export interface VpsMetrics {
   swap: { total: number; used: number };
   // Disk
   disk: { total: number; used: number; percent: number };
+  // Disk IO throughput
+  diskIo: { readBytesPerSec: number; writeBytesPerSec: number };
   // Network
-  network: { rxBytes: number; txBytes: number };
+  network: { rxBytes: number; txBytes: number; rxBytesPerSec: number; txBytesPerSec: number };
+  // GPU
+  gpu: { utilizationPercent: number; memUsedMB: number; memTotalMB: number; vendor: string; model: string } | null;
   // Processes
   processCount: number;
   // Top processes (by CPU)
@@ -39,7 +45,9 @@ export async function collectVpsMetrics(): Promise<VpsMetrics> {
     netStats,
     os,
     processes,
-    time
+    time,
+    graphics,
+    disksIO
   ] = await Promise.all([
     si.currentLoad(),
     si.currentLoad(), // si.load() removed in v5.x; use currentLoad avg instead
@@ -48,7 +56,9 @@ export async function collectVpsMetrics(): Promise<VpsMetrics> {
     si.networkStats(),
     si.osInfo(),
     si.processes(),
-    si.time()
+    si.time(),
+    si.graphics().catch(() => ({ controllers: [] })),
+    si.disksIO().catch(() => ({ rIO_sec: 0, wIO_sec: 0, tIO_sec: 0 }))
   ]);
 
   // Primary disk (root)
@@ -59,6 +69,22 @@ export async function collectVpsMetrics(): Promise<VpsMetrics> {
     (n: si.Systeminformation.NetworkStatsData) =>
       !(n as { internal?: boolean }).internal && n.operstate !== "down"
   ) ?? netStats[0];
+
+  // GPU (first controller, jika ada)
+  const gpuController = (graphics as { controllers?: Array<{ utilizationGpu?: number; memoryUsed?: number; memoryTotal?: number; vendor?: string; model?: string; name?: string }> })
+    .controllers?.[0] ?? null;
+  const gpu = gpuController
+    ? {
+        utilizationPercent: gpuController.utilizationGpu ?? 0,
+        memUsedMB: (gpuController.memoryUsed ?? 0) / 1024 / 1024,
+        memTotalMB: (gpuController.memoryTotal ?? 0) / 1024 / 1024,
+        vendor: gpuController.vendor ?? "",
+        model: gpuController.model ?? gpuController.name ?? "GPU"
+      }
+    : null;
+
+  // Disk IO throughput (bytes/sec dari systeminformation, langsung rate)
+  const diskIo = disksIO ?? { rIO_sec: 0, wIO_sec: 0 };
 
   return {
     timestamp: new Date().toISOString(),
@@ -87,10 +113,17 @@ export async function collectVpsMetrics(): Promise<VpsMetrics> {
           percent: root.use
         }
       : { total: 0, used: 0, percent: 0 },
+    diskIo: {
+      readBytesPerSec: (diskIo as { rIO_sec?: number; rIO?: number }).rIO_sec ?? (diskIo as { rIO?: number }).rIO ?? 0,
+      writeBytesPerSec: (diskIo as { wIO_sec?: number; wIO?: number }).wIO_sec ?? (diskIo as { wIO?: number }).wIO ?? 0
+    },
     network: {
       rxBytes: net?.rx_bytes ?? 0,
-      txBytes: net?.tx_bytes ?? 0
+      txBytes: net?.tx_bytes ?? 0,
+      rxBytesPerSec: net?.rx_sec ?? 0,
+      txBytesPerSec: net?.tx_sec ?? 0
     },
+    gpu,
     processCount: processes.all ?? 0,
     topProcesses: (processes.list ?? [])
       .sort((a, b) => (b.cpu ?? 0) - (a.cpu ?? 0))
@@ -141,7 +174,7 @@ export interface ServiceExecResult {
   action: ServiceAction;
   service: string;
   success: boolean;
-  status?: ServiceStatus;
+  status?: ServiceStatusType;
   output: string;
   timestamp: string;
 }
@@ -225,7 +258,7 @@ export async function execSystemctl(
   }
 }
 
-export async function readServiceStatus(service: string): Promise<ServiceStatus> {
+export async function readServiceStatus(service: string): Promise<ServiceStatusType> {
   try {
     const { stdout } = await execp(
       `systemctl is-active ${service}`,

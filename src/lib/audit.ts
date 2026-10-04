@@ -2,11 +2,17 @@
  * Audit log helpers.
  */
 import { prisma } from "@/lib/db";
-import type { AuditAction, User } from "@prisma/client";
+import { headers } from "next/headers";
+
+type AuditUser = {
+  id: string;
+  name: string;
+  email: string;
+};
 
 export interface AuditEntry {
-  user?: Pick<User, "id" | "name" | "email"> | null;
-  action: AuditAction;
+  user?: Pick<AuditUser, "id" | "name" | "email"> | null;
+  action: string;
   entity?: string;
   entityId?: string;
   details?: Record<string, unknown>;
@@ -14,10 +20,22 @@ export interface AuditEntry {
   userAgent?: string;
   success?: boolean;
   errorMsg?: string;
+  page?: string | null;
+}
+
+function resolvePage(explicit?: string | null): string | null {
+  if (explicit !== undefined && explicit !== null) return explicit;
+  try {
+    const h = headers();
+    return h.get("x-pathname") ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function writeAudit(entry: AuditEntry): Promise<void> {
   try {
+    const page = resolvePage(entry.page);
     await prisma.auditLog.create({
       data: {
         userId: entry.user?.id ?? null,
@@ -30,7 +48,8 @@ export async function writeAudit(entry: AuditEntry): Promise<void> {
         ipAddress: entry.ipAddress ?? null,
         userAgent: entry.userAgent ?? null,
         success: entry.success ?? true,
-        errorMsg: entry.errorMsg ?? null
+        errorMsg: entry.errorMsg ?? null,
+        page
       }
     });
   } catch (e) {

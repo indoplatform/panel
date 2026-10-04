@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import type { UserRole } from "@prisma/client";
+
+export type UserRoleType = "SUPER_ADMIN" | "ADMIN" | "VIEWER";
 
 export type SessionUser = {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: UserRoleType;
 };
 
 /**
@@ -36,7 +37,7 @@ export async function requireAuthPage(): Promise<SessionUser> {
 /**
  * Untuk Server Component — butuh role tertentu. Redirect ke / kalau kurang.
  */
-export async function requireRole(allowed: UserRole | UserRole[]): Promise<SessionUser> {
+export async function requireRole(allowed: UserRoleType | UserRoleType[]): Promise<SessionUser> {
   const user = await requireAuthPage();
   const list = Array.isArray(allowed) ? allowed : [allowed];
   if (!list.includes(user.role)) {
@@ -55,7 +56,7 @@ export async function requireSuperAdmin(): Promise<SessionUser> {
 /**
  * Cek role untuk client component.
  */
-export function hasRole(user: SessionUser | null, allowed: UserRole | UserRole[]): boolean {
+export function hasRole(user: SessionUser | null, allowed: UserRoleType | UserRoleType[]): boolean {
   if (!user) return false;
   const list = Array.isArray(allowed) ? allowed : [allowed];
   return list.includes(user.role);
