@@ -86,6 +86,10 @@ async function fetchKoni(env: "dev" | "prod", opts: FetchOpts): Promise<UnifiedA
         ...(opts.toDate ? { lte: opts.toDate } : {})
       };
     }
+    if (opts.importantOnly) {
+      // ±4.700 aktivitas/hari di KONI prod: saring di database, bukan di memori
+      where.OR = [{ success: false }, ...IMPORTANT_KEYWORDS.map((k) => ({ action: { contains: k } }))];
+    }
     const rows = await client.userActivity.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -274,6 +278,22 @@ interface FetchOpts {
   limit: number;
   fromDate?: Date;
   toDate?: Date;
+  /** Hanya aktivitas penting (lihat isImportantActivity). KONI difilter di database. */
+  importantOnly?: boolean;
+}
+
+/** Kata kunci aksi "penting": keputusan negatif, override, hapus, kegagalan, aksi admin sistem. */
+const IMPORTANT_KEYWORDS = ["TOLAK", "REVISI", "OVERRIDE", "DELETE", "FAIL", "REJECT", "SUSPEND", "RESTART", "STOP", "DNS", "ROLE", "PASSWORD"];
+
+/**
+ * Aktivitas yang layak disorot di Beranda: semua yang gagal, plus aksi dengan
+ * kata kunci di atas. Aktivitas rutin (input/submit data, keputusan LOLOS,
+ * login sukses) tidak termasuk.
+ */
+export function isImportantActivity(a: Pick<UnifiedActivity, "action" | "success">): boolean {
+  if (!a.success) return true;
+  const action = a.action.toUpperCase();
+  return IMPORTANT_KEYWORDS.some((k) => action.includes(k));
 }
 
 const FETCHERS: Record<ActivitySource, (opts: FetchOpts) => Promise<UnifiedActivity[]>> = {
@@ -299,6 +319,7 @@ export async function fetchUnifiedActivities(opts: {
   perSourceLimit?: number;
   fromDate?: Date;
   toDate?: Date;
+  importantOnly?: boolean;
 } = {}): Promise<UnifiedActivity[]> {
   const sources = opts.sources ?? ALL_SOURCES;
   const perSourceLimit = opts.perSourceLimit ?? 500;
@@ -306,11 +327,13 @@ export async function fetchUnifiedActivities(opts: {
   const fetchOpts: FetchOpts = {
     limit: perSourceLimit,
     fromDate: opts.fromDate,
-    toDate: opts.toDate
+    toDate: opts.toDate,
+    importantOnly: opts.importantOnly
   };
 
   const results = await Promise.all(sources.map((s) => FETCHERS[s](fetchOpts)));
-  const merged = results.flat();
+  let merged = results.flat();
+  if (opts.importantOnly) merged = merged.filter(isImportantActivity);
   merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return merged.slice(0, limit);
 }

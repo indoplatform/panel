@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DashboardLive } from "@/components/dashboard/DashboardLive";
+import { RecentActivityCard } from "@/components/dashboard/RecentActivityCard";
 import { MetricsChart } from "@/components/dashboard/MetricsChart";
 import { ServerCog, Globe, Activity, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -149,6 +150,7 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
+      <RecentActivityCard />
       <DashboardLive />
       <MetricsChart />
 
